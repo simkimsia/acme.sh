@@ -11,7 +11,7 @@ Namecheap_Actual_Api="https://api.namecheap.com/xml.response"
 Namecheap_Sandbox_Api="https://api.sandbox.namecheap.com/xml.response"
 
 ## Change to sandbox if you want to test
-Namecheap_Api = Namecheap_Sandbox_Api
+Namecheap_Api=Namecheap_Sandbox_Api
 
 ## The API key can be found at namecheap.com > Profile section, select Tools and choose the Namecheap API Access option for Business & Dev Tools.
 ## API User is the account username associated with the API key
@@ -52,8 +52,17 @@ dns_namecheap_add() {
 
   if [ -z "$Namecheap_Username" ]; then
     Namecheap_Username=""
-    _err "You don't specify namecheap username yet."
+    _err "You don't specify namecheap username account to affect yet."
     _err "Please create your username and try again."
+    return 1
+  fi
+
+  Client_IP="${Client_IP:-$(_readaccountconf_mutable Client_IP)}"
+
+  if [ -z "$Client_IP" ]; then
+    Client_IP=""
+    _err "You don't specify the whitelisted client IP username account to affect yet."
+    _err "Please ensure your namecheap has whitelisted your IP and specify it before trying again."
     return 1
   fi
 
@@ -61,12 +70,16 @@ dns_namecheap_add() {
   _saveaccountconf_mutable Namecheap_Key "$Namecheap_Key"
   _saveaccountconf_mutable Namecheap_User "$Namecheap_User"
   _saveaccountconf_mutable Namecheap_Username "$Namecheap_Username"
+  _saveaccountconf_mutable Client_IP "$Client_IP"
 
   _info "Get existing txt records for $fulldomain"
   if ! _Namecheap_request "action=QUERY&name=$fulldomain"; then
     _err "error"
     return 1
   fi
+
+  if _contains "$response" "<Error Number"; then
+    message=$(printf "%s\n" "$response" | _egrep_o '(<Error Number.*<\/Error>)')
 
   if _contains "$response" "<record"; then
     _debug "get and update records"
@@ -120,38 +133,24 @@ _Namecheap_request() {
   _contains "$response" "<is_ok>OK:"
 }
 
-# inspired by dns_me.sh private method _get_root()
-#_acme-challenge.www.domain.com
-#returns
+_egrep_o() {
+  if ! egrep -o "$1" 2>/dev/null; then
+    sed -n 's/.*\('"$1"'\).*/\1/p'
+  fi
+}
+
+# inspired by dns_namecom.sh private method _namecom_get_root()
+# _acme-challenge.www.domain.com
+# returns
 # _sub_domain=_acme-challenge.www
-# _domain=domain.com
-# _domain_id=sdjkglgdfewsdfg
+# _sld=domain
+# _tld=com
 _get_root() {
   domain=$1
-  i=2
-  p=1
-  while true; do
-    h=$(printf "%s" "$domain" | cut -d . -f $i-100)
-    if [ -z "$h" ]; then
-      #not valid
-      return 1
-    fi
-
-    if ! _me_rest GET "name?domainname=$h"; then
-      return 1
-    fi
-
-    if _contains "$response" "\"name\":\"$h\""; then
-      _domain_id=$(printf "%s\n" "$response" | _egrep_o "\"id\":[^,]*" | head -n 1 | cut -d : -f 2 | tr -d '}')
-      if [ "$_domain_id" ]; then
-        _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
-        _domain="$h"
-        return 0
-      fi
-      return 1
-    fi
-    p=$i
-    i=$(_math "$i" + 1)
-  done
+  # Need to exclude the last field (tld)
+  numfields=$(echo "$domain" | _egrep_o "\." | wc -l)
+  _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-2)
+  _tld=$(printf "%s" "$domain" | cut -d . -f 4-100)
+  _sld=$(printf "%s" "$domain" | cut -d . -f 3)
   return 1
 }
