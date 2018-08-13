@@ -11,7 +11,7 @@ Namecheap_Actual_Api="https://api.namecheap.com/xml.response"
 Namecheap_Sandbox_Api="https://api.sandbox.namecheap.com/xml.response"
 
 ## Change to sandbox if you want to test
-Namecheap_Api=Namecheap_Sandbox_Api
+Namecheap_Api="$Namecheap_Sandbox_Api"
 
 ## The API key can be found at namecheap.com > Profile section, select Tools and choose the Namecheap API Access option for Business & Dev Tools.
 ## API User is the account username associated with the API key
@@ -23,7 +23,7 @@ Namecheap_Api=Namecheap_Sandbox_Api
 
 ########  Public functions #####################
 
-#Usage: add  _acme-challenge.www.domain.com   "XKrxpRBosdIKFzxW_CT3KLZNf6q0HG9i01zxXp5CPBs"
+#Usage: add  _acme-challenge.domain.com   "XKrxpRBosdIKFzxW_CT3KLZNf6q0HG9i01zxXp5CPBs"
 dns_namecheap_add() {
   fulldomain=$1
   txtvalue=$2
@@ -72,8 +72,10 @@ dns_namecheap_add() {
   _saveaccountconf_mutable Namecheap_Username "$Namecheap_Username"
   _saveaccountconf_mutable Client_IP "$Client_IP"
 
+  _get_root "$fulldomain"
+
   _info "Get existing txt records for $fulldomain"
-  if ! _Namecheap_request "action=QUERY&name=$fulldomain"; then
+  if ! _Namecheap_request "Command=namecheap.domains.dns.getHosts&SLD=$_sld&TLD=$_tld"; then
     _err "error"
     return 1
   fi
@@ -81,6 +83,10 @@ dns_namecheap_add() {
   if _contains "$response" "<Error Number"; then
     message=$(printf "%s\n" "$response" | _egrep_o '(<Error Number.*<\/Error>)')
   fi 
+
+  if _contains "$response" "<ApiResponse Status=\"OK\""; then
+    _info "domain $fulldomain exists. We will continue to add the txt record"
+  if 
 
   if _contains "$response" "<record"; then
     _debug "get and update records"
@@ -121,17 +127,24 @@ dns_namecheap_rm() {
 _Namecheap_request() {
   qstr="$1"
 
+  ARG2=${2:-get}
+
   _debug2 "qstr" "$qstr"
 
-  _Namecheap_url="$Namecheap_Api?api_key=$Namecheap_Key&$qstr"
+  _Namecheap_url="$Namecheap_Api?ApiUser=$Namecheap_User&ApiKey=$Namecheap_Key&UserName=$Namecheap_Username&ClientIp=$Client_IP&$qstr"
   _debug2 "_Namecheap_url" "$_Namecheap_url"
-  response="$(_get "$_Namecheap_url")"
+
+  if [ "$ARG2" == "get" ]; then
+    response="$(_get "$_Namecheap_url")"
+  else
+    response="$(_post "$_Namecheap_url")"
+  fi
 
   if [ "$?" != "0" ]; then
     return 1
   fi
   _debug2 response "$response"
-  _contains "$response" "<is_ok>OK:"
+  _contains "$response" "<ApiResponse Status=\"OK\""
 }
 
 _egrep_o() {
@@ -141,17 +154,17 @@ _egrep_o() {
 }
 
 # inspired by dns_namecom.sh private method _namecom_get_root()
-# _acme-challenge.www.domain.com
+# _acme-challenge.domain.com
 # returns
-# _sub_domain=_acme-challenge.www
+# _sub_domain=_acme-challenge
 # _sld=domain
 # _tld=com
 _get_root() {
   domain=$1
   # Need to exclude the last field (tld)
   numfields=$(echo "$domain" | _egrep_o "\." | wc -l)
-  _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-2)
-  _tld=$(printf "%s" "$domain" | cut -d . -f 4-100)
-  _sld=$(printf "%s" "$domain" | cut -d . -f 3)
+  _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1)
+  _tld=$(printf "%s" "$domain" | cut -d . -f 3-100)
+  _sld=$(printf "%s" "$domain" | cut -d . -f 2)
   return 1
 }
