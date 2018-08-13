@@ -80,6 +80,7 @@ dns_namecheap_add() {
 
   if _contains "$response" "<Error Number"; then
     message=$(printf "%s\n" "$response" | _egrep_o '(<Error Number.*<\/Error>)')
+  fi 
 
   if _contains "$response" "<record"; then
     _debug "get and update records"
