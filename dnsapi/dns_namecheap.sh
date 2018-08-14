@@ -86,7 +86,7 @@ dns_namecheap_add() {
 
   if _contains "$response" "<ApiResponse Status=\"OK\""; then
     _info "domain $fulldomain exists. We will continue to add the txt record"
-  if 
+  fi
 
   if _contains "$response" "<record"; then
     _debug "get and update records"
@@ -100,9 +100,8 @@ dns_namecheap_add() {
     _Namecheap_request "$_qstr"
   else
     _debug "Just add record"
-    _Namecheap_request "action=SET&type=TXT&name=$fulldomain&value=$txtvalue"
+    _Namecheap_request "Command=namecheap.domains.dns.setHosts&SLD=$_sld&TLD=$_tld&HostName1=$_sub_domain&RecordType1=TXT&Address1=$txtvalue&TTL1=60" "post"
   fi
-
 }
 
 #fulldomain txtvalue
@@ -129,6 +128,10 @@ _Namecheap_request() {
 
   ARG2=${2:-get}
 
+  echo "$ARG2"
+
+  _debug2 "arg2" "$ARG2"
+
   _debug2 "qstr" "$qstr"
 
   _Namecheap_url="$Namecheap_Api?ApiUser=$Namecheap_User&ApiKey=$Namecheap_Key&UserName=$Namecheap_Username&ClientIp=$Client_IP&$qstr"
@@ -137,7 +140,9 @@ _Namecheap_request() {
   if [ "$ARG2" == "get" ]; then
     response="$(_get "$_Namecheap_url")"
   else
-    response="$(_post "$_Namecheap_url")"
+    # empty body for the POST
+    data="{}"
+    response="$(_post "$data" "$_Namecheap_url")"
   fi
 
   if [ "$?" != "0" ]; then
